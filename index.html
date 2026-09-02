@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D Driving Game</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #000;
+    color: #fff;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    overflow: hidden;
+  }
+  #gameCanvas { position: fixed; top: 0; left: 0; display: block; }
+
+  .screen {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    background: rgba(10, 14, 25, 0.92);
+    z-index: 10;
+    padding: 20px;
+  }
+  .hidden { display: none !important; }
+
+  h1 {
+    font-size: 2.4rem;
+    margin-bottom: 24px;
+    color: #38bdf8;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+    letter-spacing: 2px;
+  }
+  .section-title {
+    font-size: 1rem;
+    color: #cbd5e1;
+    margin-bottom: 8px;
+    align-self: center;
+    width: min(700px, 80%);
+  }
+  .option-group {
+    display: flex; gap: 15px; margin-bottom: 26px;
+    width: min(700px, 80%); justify-content: center;
+  }
+  .card {
+    flex: 1; background: #1e293b; border: 2px solid #475569; border-radius: 8px;
+    padding: 14px; text-align: center; cursor: pointer; transition: all 0.2s ease;
+  }
+  .card:hover { border-color: #38bdf8; transform: translateY(-2px); }
+  .card.selected {
+    border-color: #38bdf8; background: #334155;
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+  }
+  .card-icon { font-size: 1.8rem; margin-bottom: 5px; }
+  .card-title { font-weight: bold; font-size: 0.95rem; color: #f8fafc; }
+  .card-desc { font-size: 0.72rem; color: #94a3b8; margin-top: 4px; line-height: 1.4; }
+  .track-info {
+    width: min(700px, 80%); background: #1e293b; border: 2px solid #475569;
+    border-radius: 8px; padding: 14px; text-align: center; margin-bottom: 26px;
+  }
+  .start-btn {
+    padding: 12px 40px; font-size: 1.3rem; font-weight: bold; color: #fff;
+    background: linear-gradient(135deg, #0ea5e9, #0369a1);
+    border: none; border-radius: 25px; cursor: pointer;
+    box-shadow: 0 4px 15px rgba(14, 165, 233, 0.4); transition: all 0.2s ease;
+  }
+  .start-btn:hover { background: linear-gradient(135deg, #38bdf8, #0ea5e9); transform: scale(1.05); }
+  .hint { margin-top: 16px; font-size: 0.8rem; color: #64748b; }
+
+  #hud {
+    position: fixed; top: 15px; left: 15px; right: 15px;
+    display: flex; justify-content: space-between; font-size: 1.1rem; font-weight: bold;
+    color: #00ffcc; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); z-index: 5; pointer-events: none;
+  }
+  #offroad-warning {
+    position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+    color: #f87171; font-weight: bold; font-size: 1rem; text-shadow: 1px 1px 3px rgba(0,0,0,0.9);
+    z-index: 5; pointer-events: none;
+  }
+
+  #countdown-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    z-index: 8; pointer-events: none;
+  }
+  .light-box {
+    display: flex; gap: 16px; background: rgba(0,0,0,0.75); padding: 18px 26px;
+    border-radius: 10px; border: 2px solid #fff;
+  }
+  .light {
+    width: 42px; height: 42px; border-radius: 50%; background: #333; border: 2px solid #fff;
+    transition: background 0.2s ease;
+  }
+  .light.on { background: #e74c3c; }
+  .light.go { background: #2ecc71; }
+  #go-text {
+    margin-top: 18px; font-size: 3rem; font-weight: bold; color: #2ecc71;
+    text-shadow: 2px 2px 6px rgba(0,0,0,0.9);
+  }
+
+  .result-box {
+    background: #1e293b; padding: 30px; border-radius: 12px; border: 2px solid #38bdf8;
+    text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  }
+  .result-time { font-size: 2.2rem; color: #38bdf8; font-family: monospace; margin: 12px 0; }
+  .best-time { font-size: 1rem; color: #94a3b8; margin-bottom: 20px; }
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<div id="hud" class="hidden">
+  <div id="hud-speed">속도: 0 km/h</div>
+  <div id="hud-lap">랩: 1 / 3</div>
+  <div id="hud-timer">시간: 00:00.00</div>
+</div>
+<div id="offroad-warning" class="hidden">⚠ 도로 이탈!</div>
+
+<div id="countdown-overlay" class="hidden">
+  <div class="light-box">
+    <div class="light" id="light-1"></div>
+    <div class="light" id="light-2"></div>
+    <div class="light" id="light-3"></div>
+  </div>
+  <div id="go-text" class="hidden">GO!</div>
+</div>
+
+<div id="select-screen" class="screen">
+  <h1>3D DRIVING GAME</h1>
+
+  <div class="section-title">🚗 차량 선택</div>
+  <div class="option-group" id="car-options">
+    <div class="card selected" data-car="1">
+      <div class="card-icon">🔴</div>
+      <div class="card-title">터보 레드</div>
+      <div class="card-desc">최고 속도 210km/h<br>가속 보통 · 조향 보통</div>
+    </div>
+    <div class="card" data-car="2">
+      <div class="card-icon">🔵</div>
+      <div class="card-title">테크 블루</div>
+      <div class="card-desc">최고 속도 180km/h<br>가속 보통 · 조향 우수</div>
+    </div>
+    <div class="card" data-car="3">
+      <div class="card-icon">🟡</div>
+      <div class="card-title">선샤인 옐로우</div>
+      <div class="card-desc">최고 속도 190km/h<br>가속 우수 · 조향 보통</div>
+    </div>
+  </div>
+
+  <div class="track-info">
+    <div class="card-title">🏁 선셋 루프 서킷</div>
+    <div class="card-desc">굴곡이 있는 3랩 주행 코스 · 도로를 벗어나면 감속됩니다</div>
+  </div>
+
+  <button id="start-btn" class="start-btn">START</button>
+  <div class="hint">조작: ↑/W 가속 · ↓/S 브레이크 · ←/A, →/D 조향</div>
+</div>
+
+<div id="result-screen" class="screen hidden">
+  <div class="result-box">
+    <h1>FINISH!</h1>
+    <p>총 레이스 시간</p>
+    <div class="result-time" id="final-total-time">00:00.00</div>
+    <p>베스트 랩</p>
+    <div class="result-time" id="final-best-lap">00:00.00</div>
+    <div class="best-time" id="record-time">최고 기록: --:--.--</div>
+    <button id="restart-btn" class="start-btn">다시 하기</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // ---------- 기본 상수 ----------
+  const UP = new THREE.Vector3(0, 1, 0);
+  const ROAD_HALF_WIDTH = 12;
+  const TOTAL_LAPS = 3;
+  const WORLD_SCALE = 0.16; // km/h -> world units/sec 변환 계수
+
+  const carSpecs = {
+    1: { name: '터보 레드',    color: 0xe74c3c, dark: 0x7f1d1d, maxSpeed: 210, accel: 60, brake: 140, turnRate: 2.3 },
+    2: { name: '테크 블루',    color: 0x3498db, dark: 0x1e3a5f, maxSpeed: 180, accel: 55, brake: 140, turnRate: 3.1 },
+    3: { name: '선샤인 옐로우', color: 0xf1c40f, dark: 0x7a5b00, maxSpeed: 190, accel: 80, brake: 140, turnRate: 2.5 }
+  };
+
+  let selectedCar = 1;
+
+  // ---------- DOM ----------
+  const canvas = document.getElementById('gameCanvas');
+  const selectScreen = document.getElementById('select-screen');
+  const resultScreen = document.getElementById('result-screen');
+  const startBtn = document.getElementById('start-btn');
+  const restartBtn = document.getElementById('restart-btn');
+  const hud = document.getElementById('hud');
+  const hudSpeed = document.getElementById('hud-speed');
+  const hudLap = document.getElementById('hud-lap');
+  const hudTimer = document.getElementById('hud-timer');
+  const offroadWarning = document.getElementById('offroad-warning');
+  const countdownOverlay = document.getElementById('countdown-overlay');
+  const goText = document.getElementById('go-text');
+  const lights = [document.getElementById('light-1'), document.getElementById('light-2'), document.getElementById('light-3')];
+  const finalTotalTime = document.getElementById('final-total-time');
+  const finalBestLap = document.getElementById('final-best-lap');
+  const recordTime = document.getElementById('record-time');
+
+  document.querySelectorAll('#car-options .card').forEach(card => {
+    card.addEventListener('click', () => {
+      document.querySelectorAll('#car-options .card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+      selectedCar = parseInt(card.dataset.car, 10);
+    });
+  });
+
+  // ---------- 입력 ----------
+  const input = { accel: false, brake: false, left: false, right: false };
+  const keyMap = {
+    ArrowUp: 'accel', KeyW: 'accel',
+    ArrowDown: 'brake', KeyS: 'brake',
+    ArrowLeft: 'left', KeyA: 'left',
+    ArrowRight: 'right', KeyD: 'right'
+  };
+  window.addEventListener('keydown', e => { if (keyMap[e.code]) input[keyMap[e.code]] = true; });
+  window.addEventListener('keyup', e => { if (keyMap[e.code]) input[keyMap[e.code]] = false; });
+
+  // ---------- Three.js 기본 설정 ----------
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x87ceeb);
+  scene.fog = new THREE.Fog(0x87ceeb, 120, 520);
+
+  const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+  function resize() {
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x3a5f2b, 0.9));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+  sun.position.set(80, 140, 60);
+  scene.add(sun);
+
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(2200, 2200),
+    new THREE.MeshLambertMaterial({ color: 0x2e7d32 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  scene.add(ground);
+
+  // ---------- 트랙 생성 ----------
+  const trackPoints = [
+    new THREE.Vector3(0, 0, -120),
+    new THREE.Vector3(70, 0, -150),
+    new THREE.Vector3(150, 0, -110),
+    new THREE.Vector3(170, 0, -30),
+    new THREE.Vector3(150, 0, 60),
+    new THREE.Vector3(80, 0, 130),
+    new THREE.Vector3(0, 0, 150),
+    new THREE.Vector3(-90, 0, 130),
+    new THREE.Vector3(-160, 0, 60),
+    new THREE.Vector3(-170, 0, -30),
+    new THREE.Vector3(-140, 0, -110),
+    new THREE.Vector3(-60, 0, -150)
+  ];
+  const trackCurve = new THREE.CatmullRomCurve3(trackPoints, true, 'catmullrom', 0.5);
+  const SAMPLE_COUNT = 480;
+  const samples = trackCurve.getSpacedPoints(SAMPLE_COUNT);
+  samples.pop(); // getSpacedPoints closes the loop by repeating point 0; drop the duplicate
+  const N = samples.length;
+  const rightVecs = [];
+  for (let i = 0; i < N; i++) {
+    const next = samples[(i + 1) % N];
+    const tangent = next.clone().sub(samples[i]).normalize();
+    rightVecs.push(new THREE.Vector3().crossVectors(tangent, UP).normalize());
+  }
+
+  function buildRoadMesh() {
+    const positions = [];
+    const colors = [];
+    const c1 = new THREE.Color(0x4a5a68);
+    const c2 = new THREE.Color(0x3d4b57);
+    for (let i = 0; i < N; i++) {
+      const p = samples[i];
+      const right = rightVecs[i];
+      const left = p.clone().sub(right.clone().multiplyScalar(ROAD_HALF_WIDTH));
+      const rt = p.clone().add(right.clone().multiplyScalar(ROAD_HALF_WIDTH));
+      left.y = 0.02; rt.y = 0.02;
+      positions.push(left.x, left.y, left.z, rt.x, rt.y, rt.z);
+      const shade = Math.floor(i / 10) % 2 === 0 ? c1 : c2;
+      colors.push(shade.r, shade.g, shade.b, shade.r, shade.g, shade.b);
+    }
+    const indices = [];
+    for (let i = 0; i < N; i++) {
+      const a = i * 2, b = i * 2 + 1;
+      const ni = (i + 1) % N;
+      const c = ni * 2, d = ni * 2 + 1;
+      indices.push(a, b, c, b, d, c);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+    return new THREE.Mesh(geo, mat);
+  }
+
+  function buildCurbMesh() {
+    const positions = [];
+    const colors = [];
+    const red = new THREE.Color(0xd9432e);
+    const white = new THREE.Color(0xf2f2f2);
+    const curbWidth = 2.4;
+    for (let side = -1; side <= 1; side += 2) {
+      for (let i = 0; i < N; i++) {
+        const p = samples[i];
+        const right = rightVecs[i];
+        const innerOff = side * ROAD_HALF_WIDTH;
+        const outerOff = side * (ROAD_HALF_WIDTH + curbWidth);
+        const inner = p.clone().add(right.clone().multiplyScalar(innerOff));
+        const outer = p.clone().add(right.clone().multiplyScalar(outerOff));
+        inner.y = 0.03; outer.y = 0.03;
+        positions.push(inner.x, inner.y, inner.z, outer.x, outer.y, outer.z);
+        const shade = Math.floor(i / 6) % 2 === 0 ? red : white;
+        colors.push(shade.r, shade.g, shade.b, shade.r, shade.g, shade.b);
+      }
+    }
+    const indices = [];
+    const perSide = N * 2;
+    for (let side = 0; side < 2; side++) {
+      const base = side * perSide;
+      for (let i = 0; i < N; i++) {
+        const a = base + i * 2, b = base + i * 2 + 1;
+        const ni = (i + 1) % N;
+        const c = base + ni * 2, d = base + ni * 2 + 1;
+        indices.push(a, b, c, b, d, c);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+    return new THREE.Mesh(geo, mat);
+  }
+
+  scene.add(buildRoadMesh());
+  scene.add(buildCurbMesh());
+
+  // 출발선 (체커보드 텍스처)
+  function buildFinishLine() {
+    const size = 64;
+    const cvs = document.createElement('canvas');
+    cvs.width = size; cvs.height = size;
+    const cctx = cvs.getContext('2d');
+    const tiles = 8;
+    for (let y = 0; y < tiles; y++) {
+      for (let x = 0; x < tiles; x++) {
+        cctx.fillStyle = (x + y) % 2 === 0 ? '#111' : '#fff';
+        cctx.fillRect(x * size / tiles, y * size / tiles, size / tiles, size / tiles);
+      }
+    }
+    const tex = new THREE.CanvasTexture(cvs);
+    const geo = new THREE.PlaneGeometry(ROAD_HALF_WIDTH * 2, 5);
+    const mat = new THREE.MeshBasicMaterial({ map: tex });
+    const mesh = new THREE.Mesh(geo, mat);
+    const p = samples[0];
+    const tangent = samples[1].clone().sub(samples[0]).normalize();
+    mesh.position.set(p.x, 0.05, p.z);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.rotation.z = -Math.atan2(tangent.x, tangent.z);
+    scene.add(mesh);
+  }
+  buildFinishLine();
+
+  // ---------- 차량 모델 ----------
+  function buildCar(spec) {
+    const group = new THREE.Group();
+
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(2.0, 0.6, 4.2),
+      new THREE.MeshLambertMaterial({ color: spec.color })
+    );
+    body.position.y = 0.55;
+    group.add(body);
+
+    const cabin = new THREE.Mesh(
+      new THREE.BoxGeometry(1.2, 0.5, 1.9),
+      new THREE.MeshLambertMaterial({ color: spec.dark })
+    );
+    cabin.position.set(0, 1.05, -0.2);
+    group.add(cabin);
+
+    const spoiler = new THREE.Mesh(
+      new THREE.BoxGeometry(1.8, 0.12, 0.4),
+      new THREE.MeshLambertMaterial({ color: 0x111111 })
+    );
+    spoiler.position.set(0, 0.95, -1.95);
+    group.add(spoiler);
+
+    const wheelGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.32, 14);
+    const wheelMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+    const wheelPositions = [
+      [1.05, 0.38, 1.35], [-1.05, 0.38, 1.35],
+      [1.05, 0.38, -1.35], [-1.05, 0.38, -1.35]
+    ];
+    wheelPositions.forEach(([x, y, z]) => {
+      const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+      wheel.rotation.z = Math.PI / 2;
+      wheel.position.set(x, y, z);
+      group.add(wheel);
+    });
+
+    return group;
+  }
+
+  let carMesh = null;
+
+  // ---------- 게임 상태 ----------
+  let gameState = 'MENU'; // MENU, COUNTDOWN, RACING, FINISHED
+  let countdownStep = 3;
+  let countdownTimer = null;
+
+  let carPos = new THREE.Vector3();
+  let heading = 0;
+  let speed = 0; // km/h
+
+  let nearestIdx = 0;
+  let prevIdx = 0;
+  let lapCount = 1;
+  let raceStartTime = 0;
+  let lapStartTime = 0;
+  let lapTimes = [];
+  let bestLapMs = null;
+  let bestRecordMs = null;
+
+  const clock = new THREE.Clock();
+
+  function formatTime(ms) {
+    const totalSec = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSec / 60).toString().padStart(2, '0');
+    const seconds = (totalSec % 60).toString().padStart(2, '0');
+    const millis = Math.floor((ms % 1000) / 10).toString().padStart(2, '0');
+    return `${minutes}:${seconds}.${millis}`;
+  }
+
+  function findNearestIndex(pos, guess) {
+    let bestIdx = guess, bestDist = Infinity;
+    const range = 50;
+    for (let d = -range; d <= range; d++) {
+      const idx = ((guess + d) % N + N) % N;
+      const dist = pos.distanceToSquared(samples[idx]);
+      if (dist < bestDist) { bestDist = dist; bestIdx = idx; }
+    }
+    return bestIdx;
+  }
+
+  function resetRace() {
+    const spec = carSpecs[selectedCar];
+    if (carMesh) scene.remove(carMesh);
+    carMesh = buildCar(spec);
+    scene.add(carMesh);
+
+    const startP = samples[0];
+    const startTangent = samples[1].clone().sub(samples[0]).normalize();
+    heading = Math.atan2(startTangent.x, startTangent.z);
+    carPos.set(startP.x, 0, startP.z);
+    speed = 0;
+    nearestIdx = 0;
+    prevIdx = 0;
+    lapCount = 1;
+    lapTimes = [];
+    bestLapMs = null;
+
+    carMesh.position.copy(carPos);
+    carMesh.rotation.y = heading;
+
+    bestRecordMs = null;
+    try {
+      const stored = localStorage.getItem('record_' + selectedCar);
+      bestRecordMs = stored ? parseFloat(stored) : null;
+    } catch (e) { /* localStorage unavailable (e.g. sandboxed preview) */ }
+  }
+
+  function startCountdown() {
+    selectScreen.classList.add('hidden');
+    hud.classList.remove('hidden');
+    countdownOverlay.classList.remove('hidden');
+    goText.classList.add('hidden');
+    lights.forEach(l => l.classList.remove('on', 'go'));
+
+    resetRace();
+    gameState = 'COUNTDOWN';
+    countdownStep = 3;
+
+    countdownTimer = setInterval(() => {
+      if (countdownStep >= 1 && countdownStep <= 3) {
+        lights[3 - countdownStep].classList.add('on');
+      }
+      countdownStep--;
+      if (countdownStep < 0) {
+        clearInterval(countdownTimer);
+        lights.forEach(l => { l.classList.remove('on'); l.classList.add('go'); });
+        goText.classList.remove('hidden');
+        setTimeout(() => {
+          countdownOverlay.classList.add('hidden');
+        }, 500);
+        gameState = 'RACING';
+        raceStartTime = Date.now();
+        lapStartTime = raceStartTime;
+      }
+    }, 1000);
+  }
+
+  function completeLap() {
+    const now = Date.now();
+    const lapMs = now - lapStartTime;
+    lapTimes.push(lapMs);
+    if (bestLapMs === null || lapMs < bestLapMs) bestLapMs = lapMs;
+    lapStartTime = now;
+
+    if (lapCount >= TOTAL_LAPS) {
+      finishRace(now);
+    } else {
+      lapCount++;
+    }
+  }
+
+  function finishRace(now) {
+    gameState = 'FINISHED';
+    hud.classList.add('hidden');
+    offroadWarning.classList.add('hidden');
+
+    const totalMs = now - raceStartTime;
+    finalTotalTime.textContent = formatTime(totalMs);
+    finalBestLap.textContent = formatTime(bestLapMs);
+
+    if (bestRecordMs === null || totalMs < bestRecordMs) {
+      bestRecordMs = totalMs;
+      try { localStorage.setItem('record_' + selectedCar, String(totalMs)); }
+      catch (e) { /* localStorage unavailable (e.g. sandboxed preview) */ }
+    }
+    recordTime.textContent = `최고 기록: ${formatTime(bestRecordMs)}`;
+
+    resultScreen.classList.remove('hidden');
+  }
+
+  startBtn.addEventListener('click', startCountdown);
+  restartBtn.addEventListener('click', () => {
+    resultScreen.classList.add('hidden');
+    selectScreen.classList.remove('hidden');
+    gameState = 'MENU';
+  });
+
+  // ---------- 업데이트 ----------
+  let isOffroad = false;
+
+  function update(dt) {
+    if (gameState !== 'RACING' && gameState !== 'COUNTDOWN') return;
+
+    const spec = carSpecs[selectedCar];
+
+    if (gameState === 'RACING') {
+      const elapsed = Date.now() - raceStartTime;
+      hudTimer.textContent = `시간: ${formatTime(elapsed)}`;
+
+      const effectiveMax = isOffroad ? spec.maxSpeed * 0.35 : spec.maxSpeed;
+
+      if (input.accel) {
+        speed = Math.min(speed + spec.accel * dt, effectiveMax);
+      } else if (input.brake) {
+        speed = Math.max(speed - spec.brake * dt, 0);
+      } else {
+        speed = Math.max(speed - spec.accel * 0.4 * dt, 0);
+      }
+      if (speed > effectiveMax) {
+        speed = Math.max(speed - spec.brake * 1.5 * dt, effectiveMax);
+      }
+
+      const speedFactor = Math.max(0.2, Math.min(1, speed / spec.maxSpeed));
+      let steer = 0;
+      if (input.left) steer -= 1;
+      if (input.right) steer += 1;
+      heading += steer * spec.turnRate * speedFactor * dt;
+
+      const forward = new THREE.Vector3(Math.sin(heading), 0, Math.cos(heading));
+      const distance = speed * WORLD_SCALE * dt;
+      carPos.addScaledVector(forward, distance);
+
+      nearestIdx = findNearestIndex(carPos, nearestIdx);
+      const lateral = carPos.clone().sub(samples[nearestIdx]).dot(rightVecs[nearestIdx]);
+      isOffroad = Math.abs(lateral) > ROAD_HALF_WIDTH;
+      offroadWarning.classList.toggle('hidden', !isOffroad);
+
+      if (prevIdx > N - 60 && nearestIdx < 60) {
+        completeLap();
+      }
+      prevIdx = nearestIdx;
+
+      hudSpeed.textContent = `속도: ${Math.floor(speed)} km/h`;
+      hudLap.textContent = `랩: ${Math.min(lapCount, TOTAL_LAPS)} / ${TOTAL_LAPS}`;
+    }
+
+    carMesh.position.copy(carPos);
+    carMesh.rotation.y = heading;
+
+    // 3인칭 추격 카메라
+    const forward = new THREE.Vector3(Math.sin(heading), 0, Math.cos(heading));
+    const desiredCamPos = carPos.clone()
+      .addScaledVector(forward, -9)
+      .add(new THREE.Vector3(0, 4.5, 0));
+    camera.position.lerp(desiredCamPos, 1 - Math.pow(0.001, dt));
+    const lookTarget = carPos.clone().addScaledVector(forward, 8).add(new THREE.Vector3(0, 1.4, 0));
+    camera.lookAt(lookTarget);
+  }
+
+  function animate() {
+    requestAnimationFrame(animate);
+    const dt = Math.min(clock.getDelta(), 0.1);
+    update(dt);
+    renderer.render(scene, camera);
+  }
+
+  // 시작 화면 프리뷰용 초기 카메라
+  camera.position.set(0, 60, -180);
+  camera.lookAt(0, 0, 0);
+
+  animate();
+})();
+</script>
+</body>
+</html>
