@@ -271,10 +271,12 @@
     new THREE.Vector3(-60, 0, -150)
   ];
   const trackCurve = new THREE.CatmullRomCurve3(trackPoints, true, 'catmullrom', 0.5);
+  trackCurve.arcLengthDivisions = 400;
   const SAMPLE_COUNT = 480;
   const samples = trackCurve.getSpacedPoints(SAMPLE_COUNT);
   samples.pop(); // getSpacedPoints closes the loop by repeating point 0; drop the duplicate
   const N = samples.length;
+  const trackLength = trackCurve.getLength();
   const rightVecs = [];
   for (let i = 0; i < N; i++) {
     const next = samples[(i + 1) % N];
@@ -425,6 +427,38 @@
 
   let carMesh = null;
 
+  // ---------- NPC 차량 ----------
+  const npcSpecs = [
+    { color: 0x9b59b6, dark: 0x4a235a, maxSpeed: 150, accel: 45, lateral: -4, startOffset: -10 },
+    { color: 0x2ecc71, dark: 0x145a32, maxSpeed: 158, accel: 45, lateral: 4, startOffset: -18 }
+  ];
+  let npcCars = [];
+
+  function resetNpcCars() {
+    npcCars.forEach(npc => scene.remove(npc.mesh));
+    npcCars = npcSpecs.map(spec => ({
+      spec,
+      speed: 0,
+      dist: spec.startOffset,
+      mesh: buildCar(spec)
+    }));
+    npcCars.forEach(npc => scene.add(npc.mesh));
+  }
+
+  function updateNpcCars(dt) {
+    npcCars.forEach(npc => {
+      npc.speed = Math.min(npc.speed + npc.spec.accel * dt, npc.spec.maxSpeed);
+      npc.dist += npc.speed * WORLD_SCALE * dt;
+      const t = (((npc.dist % trackLength) + trackLength) % trackLength) / trackLength;
+      const pt = trackCurve.getPointAt(t);
+      const tan = trackCurve.getTangentAt(t).normalize();
+      const right = new THREE.Vector3().crossVectors(tan, UP).normalize();
+      const pos = pt.clone().addScaledVector(right, npc.spec.lateral);
+      npc.mesh.position.set(pos.x, 0, pos.z);
+      npc.mesh.rotation.y = Math.atan2(tan.x, tan.z);
+    });
+  }
+
   // ---------- 게임 상태 ----------
   let gameState = 'MENU'; // MENU, COUNTDOWN, RACING, FINISHED
   let countdownStep = 3;
@@ -469,6 +503,7 @@
     if (carMesh) scene.remove(carMesh);
     carMesh = buildCar(spec);
     scene.add(carMesh);
+    resetNpcCars();
 
     const startP = samples[0];
     const startTangent = samples[1].clone().sub(samples[0]).normalize();
@@ -608,6 +643,8 @@
 
       hudSpeed.textContent = `속도: ${Math.floor(speed)} km/h`;
       hudLap.textContent = `랩: ${Math.min(lapCount, TOTAL_LAPS)} / ${TOTAL_LAPS}`;
+
+      updateNpcCars(dt);
     }
 
     carMesh.position.copy(carPos);
