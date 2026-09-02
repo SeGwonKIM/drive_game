@@ -588,8 +588,8 @@
 
       const speedFactor = Math.max(0.2, Math.min(1, speed / spec.maxSpeed));
       let steer = 0;
-      if (input.left) steer -= 1;
-      if (input.right) steer += 1;
+      if (input.left) steer += 1;
+      if (input.right) steer -= 1;
       heading += steer * spec.turnRate * speedFactor * dt;
 
       const forward = new THREE.Vector3(Math.sin(heading), 0, Math.cos(heading));
